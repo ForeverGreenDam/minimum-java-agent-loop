@@ -1,12 +1,16 @@
 package com.greendam;
 
 import com.greendam.config.ConfigLoader;
+import com.greendam.entity.Message;
+import com.greendam.entity.OpenAiRequest;
 import com.greendam.util.OpenAiClient;
+
+import java.util.List;
 
 public class Main {
     public static void main(String[] args) {
         showDetails();
-        simpleChat();
+        simpleStreamChat();
     }
 
     public static void showDetails() {
@@ -22,5 +26,14 @@ public class Main {
     public static void simpleChat() {
         String reply = OpenAiClient.get().chat("你好,你是什么模型？");
         System.out.println(reply);
+    }
+
+    public static void simpleStreamChat() {
+        OpenAiRequest request = OpenAiRequest.builder()
+                .model(OpenAiClient.get().getModel())
+                .stream(true)
+                .messages(List.of(Message.builder().role("user").content("你好,你是什么模型？").build()))
+                .build();
+        OpenAiClient.get().chatStream(request, System.out::print, System.out::print);
     }
 }
