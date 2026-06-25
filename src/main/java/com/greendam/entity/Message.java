@@ -61,8 +61,32 @@ public class Message {
      *   <li>Qwen QwQ — 开启思考模式后返回</li>
      *   <li>Claude — thinking blocks（扩展形式）</li>
      * </ul>
-     * <p>仅响应中存在，不需要在请求中发送。nullable，未启用时不出现.
+     * <p><b>重要：</b>仅响应中存在，回填历史时必须清除，否则白白占用上下文窗口。
+     * 使用 {@link #toHistoryMessage()} 获取适合存历史的安全副本.
      */
     @JsonProperty("reasoning_content")
     private String reasoningContent;
+
+    /**
+     * 创建一个适合存入消息历史的"干净"副本.
+     *
+     * <p>会清除 {@code reasoningContent}，因为：
+     * <ul>
+     *   <li>reasoning 是模型的草稿纸，新 turn 不需要看到</li>
+     *   <li>reasoning 通常数倍于 content，占用大量上下文窗口</li>
+     *   <li>DeepSeek 等厂商明确建议不要回传 reasoning_content</li>
+     * </ul>
+     *
+     * @return 清理后的 Message 副本（新对象，不影响原对象）
+     */
+    public Message toHistoryMessage() {
+        return Message.builder()
+                .role(this.role)
+                .content(this.content)
+                .name(this.name)
+                .toolCalls(this.toolCalls)
+                .toolCallId(this.toolCallId)
+                // reasoningContent 刻意不复制 — 不应用于历史
+                .build();
+    }
 }

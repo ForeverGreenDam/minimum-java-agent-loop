@@ -4,7 +4,7 @@ openai:
   base-url: https://api.deepseek.com
   model: ${openai.model}
   temperature: 0.7
-  max-tokens: 4096
+  max-tokens: 65535
   timeout-seconds: 60
 
 # ==================== 日志级别 ====================

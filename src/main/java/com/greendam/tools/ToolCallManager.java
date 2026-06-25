@@ -60,9 +60,6 @@ public final class ToolCallManager {
         if (results.isEmpty()) {
             return 0;
         }
-        // 把 assistant 消息（含 tool_calls）追加到历史
-        Message assistantMsg = response.getChoices().get(0).getMessage();
-        messages.add(assistantMsg);
         // 追加 tool 结果消息
         messages.addAll(results);
         return results.size();
