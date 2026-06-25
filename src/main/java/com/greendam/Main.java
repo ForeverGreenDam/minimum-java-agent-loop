@@ -18,9 +18,24 @@ public class Main {
     public static void main(String[] args) {
         showDetails();
         registerTools();
-        System.out.println("初始化完成,请输入你的问题：");
+        System.out.println("初始化完成,请输入你的问题（多行输入完成后，另起一行输入 /send 发送）：");
         Scanner scanner = new Scanner(System.in);
-        String input = scanner.nextLine();
+        StringBuilder inputBuilder = new StringBuilder();
+        while (scanner.hasNextLine()) {
+            String line = scanner.nextLine();
+            if ("/send".equals(line.trim())) {
+                break;
+            }
+            if (inputBuilder.length() > 0) {
+                inputBuilder.append("\n");
+            }
+            inputBuilder.append(line);
+        }
+        String input = inputBuilder.toString();
+        if (input.isEmpty()) {
+            System.out.println("输入为空，程序退出。");
+            return;
+        }
         runLoop(input);
     }
 
