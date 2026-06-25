@@ -102,11 +102,14 @@ public final class ToolCallManager {
      * @return 工具执行的返回值（字符串形式）
      */
     public static String invoke(ToolCall toolCall) {
+        System.out.println("工具调用》》》》" + toolCall.getFunction().getName() + "参数： " + toolCall.getFunction().getArguments());
         FunctionCall fc = toolCall.getFunction();
         if (fc == null) {
             return error("function is null");
         }
-        return invoke(fc.getName(), fc.getArguments());
+        String result = invoke(fc.getName(), fc.getArguments());
+        System.out.println("工具结果》》》》" + result);
+        return result;
     }
 
     /**

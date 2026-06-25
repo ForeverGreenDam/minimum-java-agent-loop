@@ -33,7 +33,10 @@ public class ShellTools {
             // 根据操作系统设置 shell
             String osName = System.getProperty("os.name").toLowerCase();
             if (osName.contains("win")) {
-                pb.command("cmd.exe", "/c", command);
+                // Windows 用 PowerShell 替代 cmd.exe：
+                // - PowerShell 原生 UTF-8，不会出现中文乱码
+                // - cmd.exe 使用系统代码页 (GBK/CP936)，与 Java 的 UTF-8 解码不一致导致乱码
+                pb.command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command);
             } else {
                 pb.command("sh", "-c", command);
             }

@@ -1,7 +1,10 @@
 package com.greendam;
 
 import com.greendam.config.ConfigLoader;
-import com.greendam.entity.*;
+import com.greendam.entity.Choice;
+import com.greendam.entity.Message;
+import com.greendam.entity.OpenAiRequest;
+import com.greendam.entity.OpenAiResponse;
 import com.greendam.memory.ShortMemory;
 import com.greendam.tools.ToolCallManager;
 import com.greendam.tools.ToolDefManager;
@@ -40,6 +43,7 @@ public class Main {
         ToolDefManager.register(new WebTools());
         System.out.println("已注册工具：");
         ToolDefManager.toolNames().forEach(System.out::println);
+        System.out.println("=================================");
     }
 
     public static void runLoop(String input) {
@@ -68,8 +72,10 @@ public class Main {
             //首先将这轮的去除思考内容的message加到短期记忆中
             ShortMemory.add(message.toHistoryMessage());
             //打印出来
-            System.out.println("Thinking     : " + message.getReasoningContent());
-            System.out.println("AI        : " + message.getContent());
+            System.out.println("=================================");
+            System.out.println("Thinking         : " + message.getReasoningContent());
+            System.out.println("ASSISTANT        : " + message.getContent());
+            System.out.println("=================================");
             //然后判断本轮结束原因
             switch (finishReason) {
                 case "stop":
@@ -78,8 +84,6 @@ public class Main {
                     System.out.println("超出单轮最大长度限制，终止");
                     break;
                 case "tool_calls":
-                    System.out.println("工具调用");
-                    List<ToolCall> toolCalls = message.getToolCalls();
                     ToolCallManager.executeAndAppend(response, ShortMemory.getAll());
                     continue;
                 case "content_filter":
