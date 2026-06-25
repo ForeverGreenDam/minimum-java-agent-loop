@@ -5,14 +5,14 @@ import com.greendam.tools.annotation.Tool;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * 文件操作工具集 — 提供文件读写、目录列表、文件删除等基础文件系统操作.
+ * 文件操作工具集 — 提供文件读写、目录列表、文件删除、文件搜索、内容搜索等文件系统操作.
  *
  * <p>所有路径均支持相对路径（相对于当前工作目录）和绝对路径.
  */
@@ -140,5 +140,271 @@ public class FileTools {
         } catch (IOException e) {
             return "[ERROR] 删除失败: " + e.getMessage();
         }
+    }
+
+    /**
+     * 按文件名模式搜索文件（支持通配符匹配）。
+     *
+     * <p>搜索指定目录下匹配文件名模式的文件，支持递归搜索。
+     * 文件名模式支持 glob 语法，例如 {@code "*.java"}、{@code "*.{java,xml}"}、{@code "README*"} 等。
+     */
+    @Tool(name = "searchFiles", description = "按文件名模式搜索文件，支持通配符。例如 pattern=\"*.java\" 搜索所有Java文件，pattern=\"*test*\" 搜索文件名包含test的文件。支持glob语法如 \"*.{java,xml,txt}\"")
+    public String searchFiles(
+            @Param(name = "pattern", description = "文件名搜索模式，支持glob通配符。例如：\"*.java\"、\"*test*\"、\"README*\"、\"*.{java,xml}\"") String pattern,
+            @Param(name = "directoryPath", description = "搜索的根目录路径，默认为当前工作目录", required = false) String directoryPath,
+            @Param(name = "recursive", description = "是否递归搜索子目录，默认true", required = false) Boolean recursive,
+            @Param(name = "maxResults", description = "最大返回结果数，默认100", required = false) Integer maxResults
+    ) {
+        try {
+            Path dirPath = directoryPath != null && !directoryPath.isEmpty()
+                    ? Paths.get(directoryPath)
+                    : Paths.get("").toAbsolutePath();
+
+            if (!Files.exists(dirPath)) {
+                return "[ERROR] 目录不存在: " + dirPath.toAbsolutePath();
+            }
+            if (!Files.isDirectory(dirPath)) {
+                return "[ERROR] 路径不是目录: " + dirPath.toAbsolutePath();
+            }
+
+            boolean isRecursive = recursive == null || recursive;
+            int max = maxResults != null && maxResults > 0 ? maxResults : 100;
+
+            // 将glob模式转换为PathMatcher
+            String globPattern = "glob:" + pattern;
+            PathMatcher matcher = FileSystems.getDefault().getPathMatcher(globPattern);
+
+            List<Path> results = new ArrayList<>();
+
+            if (isRecursive) {
+                // 递归搜索：使用Files.walk遍历目录树
+                try (Stream<Path> stream = Files.walk(dirPath)) {
+                    List<Path> matched = stream
+                            .filter(Files::isRegularFile)
+                            .filter(path -> {
+                                // 对相对路径应用匹配（相对于搜索根目录）
+                                Path relativePath = dirPath.relativize(path);
+                                return matcher.matches(relativePath) || matcher.matches(path.getFileName());
+                            })
+                            .limit(max + 1L)
+                            .collect(Collectors.toList());
+                    results.addAll(matched);
+                }
+            } else {
+                // 非递归搜索：只搜索当前目录
+                try (Stream<Path> stream = Files.list(dirPath)) {
+                    List<Path> matched = stream
+                            .filter(Files::isRegularFile)
+                            .filter(path -> matcher.matches(path.getFileName()))
+                            .limit(max + 1L)
+                            .collect(Collectors.toList());
+                    results.addAll(matched);
+                }
+            }
+
+            if (results.isEmpty()) {
+                return "未找到匹配 '" + pattern + "' 的文件（搜索目录: " + dirPath.toAbsolutePath() + "）";
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("搜索模式: ").append(pattern).append("\n");
+            sb.append("搜索目录: ").append(dirPath.toAbsolutePath()).append("\n");
+            sb.append(isRecursive ? "(递归搜索)" : "(非递归搜索)").append("\n");
+            sb.append("----------------------------------------\n");
+
+            boolean truncated = results.size() > max;
+            List<Path> displayResults = truncated ? results.subList(0, max) : results;
+
+            for (Path path : displayResults) {
+                try {
+                    long bytes = Files.size(path);
+                    String sizeStr = formatFileSize(bytes);
+                    sb.append(path.toAbsolutePath()).append("  (").append(sizeStr).append(")\n");
+                } catch (IOException e) {
+                    sb.append(path.toAbsolutePath()).append("\n");
+                }
+            }
+
+            sb.append("----------------------------------------\n");
+            sb.append("共找到 ").append(displayResults.size()).append(" 个文件");
+            if (truncated) {
+                sb.append("（已截断，仅显示前 ").append(max).append(" 个结果）");
+            }
+            return sb.toString();
+
+        } catch (IOException e) {
+            return "[ERROR] 搜索文件失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 在文件中搜索指定关键词/文本（类似 grep -r 功能）。
+     *
+     * <p>在指定目录的所有文件中搜索包含指定文本的行，返回匹配的文件路径、行号和内容片段。
+     * 支持普通文本搜索和正则表达式搜索。
+     */
+    @Tool(name = "grepFiles", description = "在文件内容中搜索指定关键词或正则表达式，返回匹配的文件路径、行号和内容片段（类似 grep -r 功能）。支持普通文本搜索和正则表达式搜索。")
+    public String grepFiles(
+            @Param(name = "pattern", description = "要搜索的文本或正则表达式模式") String pattern,
+            @Param(name = "directoryPath", description = "搜索的根目录路径，默认为当前工作目录", required = false) String directoryPath,
+            @Param(name = "filePattern", description = "文件名的glob过滤模式，仅搜索匹配此模式的文件，例如\"*.java\"只搜索Java文件，默认搜索所有文件(*)", required = false) String filePattern,
+            @Param(name = "useRegex", description = "是否将pattern作为正则表达式解析，默认false表示普通文本搜索", required = false) Boolean useRegex,
+            @Param(name = "maxResults", description = "最大返回匹配行数（不含上下文显示行），默认50", required = false) Integer maxResults,
+            @Param(name = "contextLines", description = "匹配行前后各显示多少行上下文，默认0", required = false) Integer contextLines
+    ) {
+        try {
+            Path dirPath = directoryPath != null && !directoryPath.isEmpty()
+                    ? Paths.get(directoryPath)
+                    : Paths.get("").toAbsolutePath();
+
+            if (!Files.exists(dirPath)) {
+                return "[ERROR] 目录不存在: " + dirPath.toAbsolutePath();
+            }
+            if (!Files.isDirectory(dirPath)) {
+                return "[ERROR] 路径不是目录: " + dirPath.toAbsolutePath();
+            }
+
+            boolean isRegex = useRegex != null && useRegex;
+            int max = maxResults != null && maxResults > 0 ? maxResults : 50;
+            int context = contextLines != null && contextLines > 0 ? contextLines : 0;
+
+            // 文件过滤PathMatcher
+            String fileGlob = (filePattern != null && !filePattern.isEmpty()) ? "glob:" + filePattern : "glob:*";
+            PathMatcher fileMatcher = FileSystems.getDefault().getPathMatcher(fileGlob);
+
+            // 预编译正则（如果是正则模式）
+            java.util.regex.Pattern regexPattern = null;
+            if (isRegex) {
+                try {
+                    regexPattern = java.util.regex.Pattern.compile(pattern);
+                } catch (java.util.regex.PatternSyntaxException e) {
+                    return "[ERROR] 正则表达式语法错误: " + e.getMessage();
+                }
+            }
+
+            List<String> matchResults = new ArrayList<>();
+            int totalFilesSearched = 0;
+            int totalFilesMatched = 0;
+            int totalMatchedLines = 0;
+            int displayedMatchedLines = 0;
+            boolean truncated = false;
+
+            // 递归遍历目录
+            try (Stream<Path> stream = Files.walk(dirPath)) {
+                List<Path> files = stream
+                        .filter(Files::isRegularFile)
+                        .filter(path -> {
+                            Path relativePath = dirPath.relativize(path);
+                            return fileMatcher.matches(relativePath) || fileMatcher.matches(path.getFileName());
+                        })
+                        .collect(Collectors.toList());
+
+                for (Path filePath : files) {
+                    totalFilesSearched++;
+                    if (truncated) break;
+
+                    try {
+                        List<String> allLines = Files.readAllLines(filePath, StandardCharsets.UTF_8);
+                        List<Integer> matchedLines = new ArrayList<>();
+
+                        for (int i = 0; i < allLines.size(); i++) {
+                            String line = allLines.get(i);
+                            boolean found;
+                            if (isRegex) {
+                                found = regexPattern.matcher(line).find();
+                            } else {
+                                found = line.contains(pattern);
+                            }
+                            if (found) {
+                                matchedLines.add(i);
+                            }
+                        }
+
+                        if (!matchedLines.isEmpty()) {
+                            totalFilesMatched++;
+                            totalMatchedLines += matchedLines.size();
+                            // 将匹配行（含上下文）加入结果
+                            boolean firstInFile = true;
+                            for (int matchedLineIdx : matchedLines) {
+                                if (displayedMatchedLines >= max) {
+                                    truncated = true;
+                                    break;
+                                }
+
+                                if (firstInFile) {
+                                    matchResults.add("");
+                                    matchResults.add("文件: " + filePath.toAbsolutePath());
+                                    firstInFile = false;
+                                }
+
+                                int startLine = Math.max(0, matchedLineIdx - context);
+                                int endLine = Math.min(allLines.size() - 1, matchedLineIdx + context);
+
+                                for (int lineNum = startLine; lineNum <= endLine; lineNum++) {
+                                    String lineContent = allLines.get(lineNum);
+                                    // 截断过长行
+                                    if (lineContent.length() > 500) {
+                                        lineContent = lineContent.substring(0, 500) + "... [截断]";
+                                    }
+                                    String lineNumber = String.format("  %5d", lineNum + 1);
+                                    String marker = (lineNum == matchedLineIdx) ? " >" : "  ";
+                                    String resultLine = lineNumber + marker + " " + lineContent;
+                                    // 检查结果是否已存在（避免context重叠导致的重复行）
+                                    if (!matchResults.contains(resultLine)) {
+                                        matchResults.add(resultLine);
+                                    }
+                                }
+                                displayedMatchedLines++;
+                            }
+                        }
+                    } catch (IOException e) {
+                        // 跳过无法读取的文件（如二进制文件）
+                    }
+                }
+            }
+
+            if (matchResults.isEmpty()) {
+                return "在 " + totalFilesSearched + " 个文件中未找到匹配 '" + pattern + "' 的内容"
+                        + (filePattern != null && !filePattern.isEmpty() ? "（文件过滤: " + filePattern + "）" : "");
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("搜索模式: ").append(pattern);
+            if (isRegex) sb.append(" (正则表达式)");
+            sb.append("\n");
+            sb.append("搜索目录: ").append(dirPath.toAbsolutePath()).append("\n");
+            if (filePattern != null && !filePattern.isEmpty()) {
+                sb.append("文件过滤: ").append(filePattern).append("\n");
+            }
+            sb.append("搜索文件: ").append(totalFilesSearched).append(" 个, 匹配文件: ").append(totalFilesMatched).append(" 个\n");
+            sb.append("----------------------------------------\n");
+
+            for (String resultLine : matchResults) {
+                sb.append(resultLine).append("\n");
+            }
+
+            sb.append("----------------------------------------\n");
+            sb.append("共找到 ").append(totalMatchedLines).append(" 个匹配行");
+            if (context > 0) {
+                sb.append("（上下文显示行不计入匹配行总数）");
+            }
+            if (truncated) {
+                sb.append("（已截断，仅显示前 ").append(max).append(" 个匹配行，可缩小范围重试）");
+            }
+            return sb.toString();
+
+        } catch (IOException e) {
+            return "[ERROR] 搜索文件内容失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 格式化文件大小为人类可读的字符串.
+     */
+    private String formatFileSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
+        if (bytes < 1024L * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
+        return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
     }
 }

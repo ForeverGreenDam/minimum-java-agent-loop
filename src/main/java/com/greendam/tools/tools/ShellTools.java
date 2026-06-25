@@ -6,6 +6,7 @@ import com.greendam.tools.annotation.Tool;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
@@ -24,7 +25,7 @@ public class ShellTools {
      */
     @Tool(name = "executeShell", description = "执行一条Shell命令并返回标准输出和标准错误。命令默认60秒超时，避免长时间阻塞。用于执行系统操作如查看文件、运行脚本等。")
     public String executeShell(
-            @Param(name = "command", description = "要执行的Shell命令。在Windows上使用cmd.exe语法，在Linux/Mac上使用bash语法") String command,
+            @Param(name = "command", description = "要执行的Shell命令。在Windows上优先兼容cmd.exe常见语法（如 dir、type、findstr、管道与重定向），Linux/Mac上使用bash语法") String command,
             @Param(name = "workingDir", description = "命令执行的工作目录，默认为当前工作目录", required = false) String workingDir
     ) {
         try {
@@ -32,11 +33,14 @@ public class ShellTools {
 
             // 根据操作系统设置 shell
             String osName = System.getProperty("os.name").toLowerCase();
+            Charset outputCharset = StandardCharsets.UTF_8;
             if (osName.contains("win")) {
-                // Windows 用 PowerShell 替代 cmd.exe：
-                // - PowerShell 原生 UTF-8，不会出现中文乱码
-                // - cmd.exe 使用系统代码页 (GBK/CP936)，与 Java 的 UTF-8 解码不一致导致乱码
-                pb.command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command);
+                // Windows 默认优先兼容 cmd 风格命令：
+                // - 现有工具调用大量使用 cmd.exe /c、dir、type、findstr、重定向、管道等语法
+                // - 直接交给 PowerShell 会触发它自己的解析规则，导致 |、^、引号、} 等字符频繁报错
+                // - 使用 /U 可让内部命令输出 UTF-16LE，便于 Java 端稳定读取中文
+                pb.command("cmd.exe", "/U", "/C", command);
+                outputCharset = Charset.forName("UTF-16LE");
             } else {
                 pb.command("sh", "-c", command);
             }
@@ -57,7 +61,7 @@ public class ShellTools {
             // 读取 stdout
             StringBuilder stdout = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                    new InputStreamReader(process.getInputStream(), outputCharset))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (stdout.length() > 0) stdout.append("\n");
@@ -68,7 +72,7 @@ public class ShellTools {
             // 读取 stderr
             StringBuilder stderr = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+                    new InputStreamReader(process.getErrorStream(), outputCharset))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (stderr.length() > 0) stderr.append("\n");

@@ -347,15 +347,15 @@ public @interface Param {
 
 ## 4. 工具一览
 
-| 工具类          | 方法数    | 方法列表                                                       |
-|--------------|--------|------------------------------------------------------------|
-| `FileTools`  | 4      | `readFile`, `writeFile`, `listFiles`, `deleteFile`         |
-| `MathTools`  | 2      | `calculate`, `randomNumber`                                |
-| `TimeTools`  | 1      | `getCurrentTime`                                           |
-| `ShellTools` | 1      | `executeShell`                                             |
-| `TextTools`  | 4      | `countText`, `textReplace`, `base64Encode`, `base64Decode` |
-| `WebTools`   | 2      | `httpGet`, `httpPost`                                      |
-| **合计**       | **14** |                                                            |
+| 工具类          | 方法数    | 方法列表                                                                           |
+|--------------|--------|--------------------------------------------------------------------------------|
+| `FileTools`  | 6      | `readFile`, `writeFile`, `listFiles`, `deleteFile`, `searchFiles`, `grepFiles` |
+| `MathTools`  | 2      | `calculate`, `randomNumber`                                                    |
+| `TimeTools`  | 1      | `getCurrentTime`                                                               |
+| `ShellTools` | 1      | `executeShell`                                                                 |
+| `TextTools`  | 4      | `countText`, `textReplace`, `base64Encode`, `base64Decode`                     |
+| `WebTools`   | 2      | `httpGet`, `httpPost`                                                          |
+| **合计**       | **16** |                                                                                |
 
 > 详细的工具参数说明见 [TOOLS.md](./TOOLS.md)
 

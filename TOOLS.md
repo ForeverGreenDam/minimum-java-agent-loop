@@ -33,13 +33,13 @@ register(new WebTools());
 
 | # | 工具类            | 工具方法数  | 分类        |
 |---|----------------|--------|-----------|
-| 1 | **FileTools**  | 4      | 文件操作      |
+| 1 | **FileTools**  | 6      | 文件操作      |
 | 2 | **MathTools**  | 2      | 数学计算      |
 | 3 | **TimeTools**  | 1      | 时间获取      |
 | 4 | **ShellTools** | 1      | Shell 命令  |
 | 5 | **TextTools**  | 4      | 文本处理      |
 | 6 | **WebTools**   | 2      | HTTP 网络请求 |
-|   | **总计**         | **14** |           |
+|   | **总计**         | **16** |           |
 
 ---
 
@@ -47,7 +47,7 @@ register(new WebTools());
 
 **类路径：** `com.greendam.tools.tools.FileTools`
 
-提供文件读写、目录列表、删除等基础文件系统操作。所有路径均支持相对路径（相对于当前工作目录）和绝对路径。
+提供文件读写、目录列表、删除、文件搜索、文件内容搜索等文件系统操作。所有路径均支持相对路径（相对于当前工作目录）和绝对路径。
 
 ### 1.1 readFile
 
@@ -82,6 +82,112 @@ register(new WebTools());
 | 参数     | 类型       | 必填 | 描述       |
 |--------|----------|:--:|----------|
 | `path` | `string` | ✅  | 要删除的文件路径 |
+
+### 1.5 searchFiles
+
+按文件名模式搜索文件（支持通配符匹配）。使用 Java 的 glob 语法进行文件名模式匹配，支持递归/非递归搜索。
+
+**适用场景：** 查找特定类型的文件（如所有 Java 文件、所有配置文件）、按文件名模式定位文件。
+
+| 参数              | 类型        | 必填 | 描述                                                                |
+|-----------------|-----------|:--:|-------------------------------------------------------------------|
+| `pattern`       | `string`  | ✅  | 文件名搜索模式，支持 glob 通配符。例如 `"*.java"`、`"*test*"`、`"*.{java,xml,txt}"` |
+| `directoryPath` | `string`  | ❌  | 搜索的根目录路径，默认为当前工作目录                                                |
+| `recursive`     | `boolean` | ❌  | 是否递归搜索子目录，默认 `true`                                               |
+| `maxResults`    | `number`  | ❌  | 最大返回结果数，默认 100                                                    |
+
+**返回信息：**
+
+- 搜索模式
+- 搜索目录
+- 匹配的文件路径（带文件大小，自动格式化 KB/MB/GB）
+- 结果总数（可能截断）
+
+**示例输出：**
+
+```
+搜索模式: *.java
+搜索目录: /home/user/project
+(递归搜索)
+----------------------------------------
+/home/user/project/src/main/Main.java  (2.3 KB)
+/home/user/project/src/util/Helper.java  (5.1 KB)
+/home/user/project/src/test/Test.java  (1.2 KB)
+----------------------------------------
+共找到 3 个文件
+```
+
+### 1.6 grepFiles
+
+在文件内容中搜索指定关键词或正则表达式（类似 `grep -r` 功能）。在指定目录的所有文件中搜索包含指定文本的行，返回匹配的文件路径、行号和内容片段。
+
+**适用场景：** 查找某个函数/变量的所有引用位置、搜索日志中的特定错误信息、按内容定位文件。
+
+| 参数              | 类型        | 必填 | 描述                                                            |
+|-----------------|-----------|:--:|---------------------------------------------------------------|
+| `pattern`       | `string`  | ✅  | 要搜索的文本或正则表达式模式                                                |
+| `directoryPath` | `string`  | ❌  | 搜索的根目录路径，默认为当前工作目录                                            |
+| `filePattern`   | `string`  | ❌  | 文件名的 glob 过滤模式，仅搜索匹配此模式的文件，例如 `"*.java"` 只搜索 Java 文件，默认搜索所有文件 |
+| `useRegex`      | `boolean` | ❌  | 是否将 pattern 作为正则表达式解析，默认 `false` 表示普通文本搜索                     |
+| `maxResults`    | `number`  | ❌  | 最大返回匹配行数（不含上下文显示行），默认 50                                      |
+| `contextLines`  | `number`  | ❌  | 匹配行前后各显示多少行上下文，默认 0（仅显示匹配行本身）                                 |
+
+**返回信息：**
+
+- 搜索模式（如果是正则表达式会标注）
+- 搜索目录
+- 文件过滤条件（如有）
+- 搜索的文件总数和匹配文件数
+- 每个匹配文件内显示命中的匹配行及其上下文文本行（含行号），匹配行使用 `>` 标记，上下文文本行使用空白标记
+- 匹配行总数（可能截断）；上下文文本行仅用于展示，不计入匹配行总数
+
+**行为特性：**
+
+- 自动跳过无法读取的文件（如二进制文件）
+- 过长行自动截断（超过 500 字符的部分以 `... [截断]` 表示）
+- 支持 `contextLines` 显示上下文，自动避免上下文重叠导致的重复行
+
+**示例输出（普通文本搜索）：**
+
+```
+搜索模式: ToolDefManager
+搜索目录: /home/user/project
+搜索文件: 42 个, 匹配文件: 3 个
+----------------------------------------
+
+文件: /home/user/project/src/main/Main.java
+     15 |         ToolDefManager.register(new FileTools());
+     16 |         ToolDefManager.register(new MathTools());
+     17 |         ToolDefManager.register(new TimeTools());
+
+文件: /home/user/project/src/tools/ToolDefManager.java
+     42 | public class ToolDefManager {
+     45 |     public static void register(Object instance) {
+----------------------------------------
+共找到 6 个匹配行
+```
+
+**示例输出（正则表达式 + 上下文）：**
+
+```
+搜索模式: public.*class (正则表达式)
+搜索目录: /home/user/project
+文件过滤: *.java
+搜索文件: 15 个, 匹配文件: 5 个
+----------------------------------------
+
+文件: /home/user/project/src/tools/ToolDefManager.java
+     41 | 
+   > 42 | public class ToolDefManager {
+     43 | 
+
+文件: /home/user/project/src/tools/ToolCallManager.java
+     30 | 
+   > 31 | public class ToolCallManager {
+     32 | 
+----------------------------------------
+共找到 5 个匹配行（上下文文本行不计入匹配行总数）
+```
 
 ---
 
