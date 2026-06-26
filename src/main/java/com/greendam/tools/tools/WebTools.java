@@ -2,6 +2,8 @@ package com.greendam.tools.tools;
 
 import com.greendam.tools.annotation.Param;
 import com.greendam.tools.annotation.Tool;
+import com.microsoft.playwright.*;
+import com.microsoft.playwright.options.WaitUntilState;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -22,6 +24,53 @@ public class WebTools {
             .connectTimeout(Duration.ofSeconds(30))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
+
+    // ==================== Playwright 无头浏览器 ====================
+
+    /**
+     * Playwright 实例（全局复用，JVM 退出时需调用 {@link #shutdownPlaywright()} 释放）
+     */
+    private static volatile Playwright PLAYWRIGHT;
+    private static volatile Browser BROWSER;
+
+    /**
+     * 获取或创建全局 Browser 实例（懒加载 + 双重检查锁）
+     */
+    private static Browser getBrowser() {
+        if (BROWSER == null) {
+            synchronized (WebTools.class) {
+                if (BROWSER == null) {
+                    PLAYWRIGHT = Playwright.create();
+                    BROWSER = PLAYWRIGHT.chromium().launch(new BrowserType.LaunchOptions()
+                            .setHeadless(true));
+                }
+            }
+        }
+        return BROWSER;
+    }
+
+    /**
+     * 关闭 Playwright，释放浏览器进程和临时文件.
+     * 应在 JVM 退出前调用（Main 中已注册 shutdown hook）.
+     */
+    public static void shutdownPlaywright() {
+        if (BROWSER != null) {
+            try {
+                BROWSER.close();
+            } catch (Exception ignored) {
+            }
+            BROWSER = null;
+        }
+        if (PLAYWRIGHT != null) {
+            try {
+                PLAYWRIGHT.close();
+            } catch (Exception ignored) {
+            }
+            PLAYWRIGHT = null;
+        }
+    }
+
+    // ==================== 请求解析辅助 ====================
 
     /**
      * 简单解析 JSON 格式的 headers 字符串并设置到请求构建器.
@@ -311,6 +360,69 @@ public class WebTools {
             return text;
         } catch (Exception e) {
             return "[ERROR] 网页抓取失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 使用无头浏览器（Chromium）渲染网页并提取可见文本.
+     *
+     * <p>与 {@code webToText} 的区别：
+     * <ul>
+     *   <li>本工具会启动真实浏览器引擎，执行 JavaScript，等待网络空闲后再提取内容</li>
+     *   <li>适合 SPA（React/Vue/Angular）、Ajax 动态加载、需要 JS 渲染的页面</li>
+     *   <li>速度较慢（首次启动约 2-3 秒），优先使用 {@code webToText}，遇到动态页面再换本工具</li>
+     * </ul>
+     */
+    @Tool(name = "webToTextBrowser", description = "使用无头浏览器(Chromium)渲染网页后提取纯文本。会等待JavaScript执行和网络请求完成，适合动态加载的SPA页面。如果webToText抓到的内容为空或提示动态渲染，请用本工具。速度较慢，优先用webToText。")
+    public String webToTextBrowser(
+            @Param(name = "url", description = "要抓取的网页URL") String url,
+            @Param(name = "maxChars", description = "最大返回字符数，默认8000", required = false) Long maxChars
+    ) {
+        long limit = (maxChars != null && maxChars > 0) ? maxChars : 8000L;
+
+        Browser browser = getBrowser();
+        BrowserContext context = browser.newContext(new Browser.NewContextOptions()
+                .setUserAgent("Mozilla/5.0 (compatible; MinimumAgent/1.0)"));
+        Page page = context.newPage();
+        try {
+            // 导航到页面，等待网络空闲（SPA 数据加载完成）
+            page.navigate(url, new Page.NavigateOptions()
+                    .setWaitUntil(WaitUntilState.NETWORKIDLE)
+                    .setTimeout(30000));
+
+            // innerText 只取可见文本，效果比 textContent 干净
+            String text = page.innerText("body");
+            if (text == null || text.isBlank()) {
+                // 降级：有些页面 innerText 无效，改用 textContent + HTML 清洗
+                String html = page.content();
+                text = cleanHtml(html);
+            }
+
+            if (text == null || text.isBlank()) {
+                return "[WARN] 渲染后仍未提取到文本内容";
+            }
+
+            // 规范化空白
+            text = normalizeWhitespace(text);
+
+            // 截断
+            int originalLen = text.length();
+            if (text.length() > limit) {
+                text = text.substring(0, (int) limit);
+                text += "\n\n... (文本已截断至 " + limit + " 字符，原始共 " + originalLen + " 字符)";
+            }
+
+            return text;
+        } catch (Exception e) {
+            return "[ERROR] 浏览器抓取失败: " + e.getMessage();
+        } finally {
+            try {
+                page.close();
+            } catch (Exception ignored) {
+            }
+            try {
+                context.close();
+            } catch (Exception ignored) {}
         }
     }
 }

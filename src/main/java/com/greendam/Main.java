@@ -42,6 +42,8 @@ public class Main {
         }
         // 退出对话后保存对话记忆到 log 目录
         ConversationLogger.saveToFile(ShortMemory.getAll());
+        // 清理 Playwright 浏览器资源
+        WebTools.shutdownPlaywright();
     }
 
     public static void showDetails() {
