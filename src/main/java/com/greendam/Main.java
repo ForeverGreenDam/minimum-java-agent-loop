@@ -19,6 +19,8 @@ public class Main {
     public static void main(String[] args) {
         showDetails();
         registerTools();
+        initMemory();
+        injectSystemPrompt();
         while (true) {
             System.out.println("请输入你的问题（多行输入完成后，另起一行输入 /send 发送,如果仅输入 /send 则推出对话）：");
             Scanner scanner = new Scanner(System.in);
@@ -73,6 +75,9 @@ public class Main {
         ShortMemory.add(Message.builder().role("user").content(input).build());
         //进入循环
         while (true) {
+            // 确保上下文窗口不超限
+            ShortMemory.ensureCapacity();
+
             //非流式
             //构造请求体
             OpenAiRequest request = OpenAiRequest.builder()
@@ -106,7 +111,7 @@ public class Main {
                     System.out.println("超出单轮最大长度限制，终止");
                     break;
                 case "tool_calls":
-                    ToolCallManager.executeAndAppend(response, ShortMemory.getAll());
+                    ShortMemory.addAll(ToolCallManager.execute(response));
                     continue;
                 case "content_filter":
                     System.out.println("包含过滤词，无法显示");
@@ -117,6 +122,45 @@ public class Main {
             }
             break;
         }
+    }
+
+    /**
+     * 从配置文件加载记忆系统参数.
+     */
+    private static void initMemory() {
+        ConfigLoader cfg = ConfigLoader.get();
+        int maxCtxTokens = cfg.getInt("memory.short.max-context-tokens", 128000);
+        int reserveTk = cfg.getInt("memory.short.reserve-tokens", 8000);
+        int keepTurns = cfg.getInt("memory.short.keep-turns", 3);
+        ShortMemory.setMaxTokens(maxCtxTokens);
+        ShortMemory.setReserveTokens(reserveTk);
+        ShortMemory.setKeepTurns(keepTurns);
+        System.out.println("记忆系统：maxTokens=" + maxCtxTokens
+                + " reserveTokens=" + reserveTk + " keepTurns=" + keepTurns);
+    }
+
+    /**
+     * 注入 system prompt — 定义 Agent 的角色、能力和行为准则.
+     * <p>只在会话开始时调用一次，system 消息不会被上下文窗口截断移除.
+     */
+    private static void injectSystemPrompt() {
+        Message systemMsg = Message.builder()
+                .role("system")
+                .content("""
+                        你是 Minimum Java Agent，一个运行在 Java 21 环境中的 AI 助手。
+                        
+                        ## 核心能力
+                        - 你可以调用工具完成文件读写、Shell 命令执行、网络请求、数学计算、文本处理等任务
+                        - 你拥有短期记忆（当前会话上下文）和长期记忆（跨会话持久化），能记住对话中的重要信息
+                        
+                        ## 行为准则
+                        - 优先使用工具完成任务，而非凭空猜测
+                        - 回答简洁准确，代码示例使用 Markdown 代码块标注语言
+                        - 当上下文不足或信息不确定时，主动询问而非假设
+                        - 涉及文件操作、Shell 命令等可能有副作用的操作时，先说明意图再执行
+                        """)
+                .build();
+        ShortMemory.add(systemMsg);
     }
 
     public static void simpleChat() {

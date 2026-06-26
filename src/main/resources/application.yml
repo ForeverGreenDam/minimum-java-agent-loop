@@ -7,6 +7,16 @@ openai:
   max-tokens: 393216
   timeout-seconds: 60
 
+# ==================== 记忆系统 ====================
+memory:
+  short:
+    # 上下文窗口最大 token 数（超出后自动对早期轮次进行摘要压缩）
+    max-context-tokens: 200000
+    # 预留给模型响应的 token 数（从 max-context-tokens 中扣除）
+    reserve-tokens: 8000
+    # 保留最近 N 轮完整对话不被摘要压缩（至少为 1）
+    keep-turns: 3
+
 # ==================== 日志级别 ====================
 logging:
   level:
