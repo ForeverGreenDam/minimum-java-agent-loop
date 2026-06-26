@@ -32,7 +32,12 @@ public class Message {
      * 消息内容.
      * <p>纯文本时为 String；多模态（vision）时可以是 List&lt;ContentPart&gt;.
      * 使用 Object 兼容两种形态.
+     *
+     * <p>使用 {@code ALWAYS} 确保 content 始终序列化到 JSON，
+     * 即使为 {@code null} 或空字符串。部分 API（如 DeepSeek）要求
+     * assistant(tool_calls) 消息中 content 字段必须存在。
      */
+    @JsonInclude(JsonInclude.Include.ALWAYS)
     private Object content;
 
     /**

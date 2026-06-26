@@ -35,12 +35,14 @@ public class ShellTools {
             String osName = System.getProperty("os.name").toLowerCase();
             Charset outputCharset = StandardCharsets.UTF_8;
             if (osName.contains("win")) {
-                // Windows 默认优先兼容 cmd 风格命令：
-                // - 现有工具调用大量使用 cmd.exe /c、dir、type、findstr、重定向、管道等语法
-                // - 直接交给 PowerShell 会触发它自己的解析规则，导致 |、^、引号、} 等字符频繁报错
-                // - 使用 /U 可让内部命令输出 UTF-16LE，便于 Java 端稳定读取中文
-                pb.command("cmd.exe", "/U", "/C", command);
-                outputCharset = Charset.forName("UTF-16LE");
+                // Windows 使用 cmd.exe 执行命令：
+                // - chcp 65001 设置控制台代码页为 UTF-8，使 cmd 内部命令（dir/type/echo）
+                //   和外部程序统一输出 UTF-8（替代仅对内部命令有效的 /U 方案）
+                // - PYTHONIOENCODING=utf-8 确保 Python 在管道模式（非 TTY stdout）下也输出 UTF-8
+                // - 避免使用 PowerShell：它的解析规则对 |、^、引号、} 等字符处理不同，易出错
+                pb.command("cmd.exe", "/C", "chcp 65001 > nul && " + command);
+                pb.environment().put("PYTHONIOENCODING", "utf-8");
+                outputCharset = StandardCharsets.UTF_8;
             } else {
                 pb.command("sh", "-c", command);
             }
