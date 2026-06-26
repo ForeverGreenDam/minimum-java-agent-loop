@@ -17,10 +17,7 @@ import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
-        showDetails();
-        registerTools();
-        initMemory();
-        injectSystemPrompt();
+        initDetails();
         while (true) {
             System.out.println("请输入你的问题（多行输入完成后，另起一行输入 /send 发送,如果仅输入 /send 则推出对话）：");
             Scanner scanner = new Scanner(System.in);
@@ -48,7 +45,7 @@ public class Main {
         WebTools.shutdownPlaywright();
     }
 
-    public static void showDetails() {
+    public static void initDetails() {
         System.out.println("==========Minimum Agent==========");
         //设置 profile为DEV，这样就能使用application-dev.yml
         ConfigLoader.setProfile("dev");
@@ -56,6 +53,10 @@ public class Main {
         System.out.println("当前BaseURL： " + ConfigLoader.get().getString("openai.base-url"));
         System.out.println("当前最大Tokens：" + ConfigLoader.get().getInt("openai.max-tokens", 4096));
         System.out.println("当前温度：" + ConfigLoader.get().getDouble("openai.temperature", 0.7));
+        registerTools();
+        initMemory();
+        injectSystemPrompt();
+        System.out.println("=================================");
     }
 
     public static void registerTools() {
@@ -66,8 +67,7 @@ public class Main {
         ToolDefManager.register(new TextTools());
         ToolDefManager.register(new WebTools());
         System.out.println("已注册工具：");
-        ToolDefManager.toolNames().forEach(System.out::println);
-        System.out.println("=================================");
+        ToolDefManager.toolNames().forEach(name -> System.out.print(name + " "));
     }
 
     public static void runLoop(String input) {
@@ -147,7 +147,7 @@ public class Main {
         Message systemMsg = Message.builder()
                 .role("system")
                 .content("""
-                        你是 Minimum Java Agent，一个运行在 Java 21 环境中的 AI 助手。
+                        你是 Minimum Java Agent，一个运行在 Java 21 环境中的最小的 AI 助手。
                         
                         ## 核心能力
                         - 你可以调用工具完成文件读写、Shell 命令执行、网络请求、数学计算、文本处理等任务
@@ -158,6 +158,7 @@ public class Main {
                         - 回答简洁准确，代码示例使用 Markdown 代码块标注语言
                         - 当上下文不足或信息不确定时，主动询问而非假设
                         - 涉及文件操作、Shell 命令等可能有副作用的操作时，先说明意图再执行
+                        - 当涉及到时间敏感型问题时，优先调用getCurrentTime获取当前时间
                         """)
                 .build();
         ShortMemory.add(systemMsg);
