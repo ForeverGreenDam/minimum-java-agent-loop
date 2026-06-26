@@ -26,3 +26,5 @@ replay_pid*
 /.claude/
 /src/main/resources/application-dev.yml
 /target/
+/log/
+/tmp/
