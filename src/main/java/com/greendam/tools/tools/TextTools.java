@@ -47,7 +47,7 @@ public class TextTools {
     /**
      * 在文本中查找并替换指定内容.
      */
-    @Tool(name = "textReplace", description = "在文本中查找并替换指定字符串。支持普通替换和正则表达式替换。返回替换后的文本。")
+    @Tool(name = "textReplace", description = "在文本中查找并替换指定字符串。支持普通替换和正则表达式替换。返回替换后的文本。【注意】本工具是纯文本处理函数，只返回替换后的字符串，不会修改任何文件。如果需要将替换结果写入文件，请将本工具的返回值作为 writeFile 工具的 content 参数传入。")
     public String textReplace(
             @Param(name = "text", description = "原始文本") String text,
             @Param(name = "search", description = "要查找的字符串或正则表达式") String search,
@@ -70,8 +70,10 @@ public class TextTools {
             if (regex) {
                 result = text.replaceAll(search, replace);
             } else {
-                // 普通字符串替换 - 使用 Pattern.quote 避免正则特殊字符问题
-                result = text.replace(java.util.regex.Pattern.quote(search), replace);
+                // String.replace(CharSequence, CharSequence) 本身就是字面替换，不识别正则
+                // 注意：不要用 Pattern.quote(search)，那会把 "foo" 变成 "\Qfoo\E"，
+                // 而 String.replace() 会去字面匹配 "\Qfoo\E" 这串字符，导致匹配不到原文中的 "foo"
+                result = text.replace(search, replace);
             }
             return result;
         } catch (Exception e) {

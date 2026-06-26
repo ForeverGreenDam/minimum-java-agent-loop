@@ -70,6 +70,65 @@ public class FileTools {
     }
 
     /**
+     * 在文件中查找并替换文本，直接保存到原文件.
+     *
+     * <p>读取指定文件 → 查找替换文本 → 写回原文件，一步完成。
+     * 支持普通文本替换和正则表达式替换。
+     */
+    @Tool(name = "replaceInFile", description = "在文件中查找并替换指定字符串，直接保存到原文件。支持普通替换和正则表达式替换。相当于 readFile + textReplace + writeFile 的一步整合，避免手动三步调用的麻烦。")
+    public String replaceInFile(
+            @Param(name = "path", description = "要修改的文件路径") String path,
+            @Param(name = "search", description = "要查找的字符串或正则表达式") String search,
+            @Param(name = "replace", description = "替换为的字符串") String replace,
+            @Param(name = "useRegex", description = "是否将search作为正则表达式解析，默认false为普通文本替换", required = false) Boolean useRegex
+    ) {
+        if (search == null || search.isEmpty()) {
+            return "[ERROR] search 不能为空";
+        }
+        if (replace == null) {
+            replace = "";
+        }
+        try {
+            Path filePath = Paths.get(path);
+            if (!Files.exists(filePath)) {
+                return "[ERROR] 文件不存在: " + filePath.toAbsolutePath();
+            }
+            if (!Files.isRegularFile(filePath)) {
+                return "[ERROR] 路径不是文件: " + filePath.toAbsolutePath();
+            }
+
+            // 读取原文件
+            String original = Files.readString(filePath, StandardCharsets.UTF_8);
+
+            // 执行替换
+            boolean regex = useRegex != null && useRegex;
+            String replaced;
+            if (regex) {
+                replaced = original.replaceAll(search, replace);
+            } else {
+                replaced = original.replace(search, replace);
+            }
+
+            // 如果没有变化，直接返回
+            if (replaced.equals(original)) {
+                return "文件未发生变化（未找到匹配内容）: " + filePath.toAbsolutePath();
+            }
+
+            // 写回原文件
+            Files.writeString(filePath, replaced, StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING);
+
+            int diffChars = replaced.length() - original.length();
+            String diffSign = diffChars >= 0 ? "+" : "";
+            return "文件替换成功: " + filePath.toAbsolutePath() + "\n"
+                    + "替换前: " + original.length() + " 字符, 替换后: " + replaced.length() + " 字符 (" + diffSign + diffChars + ")\n"
+                    + "注: 如果需要查看修改后的内容，请使用 readFile 工具读取该文件。";
+        } catch (IOException e) {
+            return "[ERROR] 文件替换失败: " + e.getMessage();
+        }
+    }
+
+    /**
      * 列出目录下的所有文件和子目录.
      */
     @Tool(name = "listFiles", description = "列出指定目录下的所有文件和子目录名称。不递归子目录。")
