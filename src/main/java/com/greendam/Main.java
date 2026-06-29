@@ -79,6 +79,7 @@ public class Main {
         ToolDefManager.register(new TextTools());
         ToolDefManager.register(new WebTools());
         ToolDefManager.register(new MemoryTools());
+        ToolDefManager.register(new SteamTools());
         System.out.println("已注册工具：");
         ToolDefManager.toolNames().forEach(name -> System.out.print(name + " "));
     }
@@ -218,6 +219,7 @@ public class Main {
                         - 涉及文件操作、Shell 命令等可能有副作用的操作时，先说明意图再执行
                         - 当涉及到时间敏感型问题时，优先调用getCurrentTime获取当前时间
                         - 如果你第一次调用webToText工具，网站没有返回想要的数据，那么有可能是这是个动态网页，需要你再调用webToTextBrowser获取动态网页内容
+                        - 使用steam工具时，如果涉及到用户ID，你应当主动询问用户的steamID
                         """)
                 .build();
         ShortMemory.add(systemMsg);

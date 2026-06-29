@@ -37,6 +37,11 @@ memory:
       top-k: 5                 # 每轮检索注入的记忆数
       auto-inject: true        # 是否自动将检索结果注入上下文
 
+# ==================== Steam 配置 ====================
+steam:
+  # Steam Web API Key (申请地址: https://steamcommunity.com/dev/apikey)
+  api-key: ${steam.api-key}
+
 # ==================== 日志级别 ====================
 logging:
   level:
