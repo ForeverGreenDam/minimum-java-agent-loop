@@ -116,6 +116,8 @@ public class SteamTools {
         }
     }
 
+    // ==================== 辅助方法 ====================
+
     /**
      * 格式化分钟数为可读时长.
      */
@@ -137,6 +139,81 @@ public class SteamTools {
         if (remainHours > 0) sb.append(remainHours).append("小时");
         if (mins > 0) sb.append(mins).append("分钟");
         return sb.toString();
+    }
+
+    /**
+     * 清理 HTML 标签，提取纯文本.
+     * 处理 Steam API 返回的 HTML 内容，保留文本结构。
+     */
+    private static String cleanHtml(String html) {
+        if (html == null || html.isEmpty()) return "";
+
+        String text = html;
+        // 1. 将块级标签替换为换行，保留段落结构
+        text = text.replaceAll("(?i)<br\\s*/?>", "\n");
+        text = text.replaceAll("(?i)</p>", "\n\n");
+        text = text.replaceAll("(?i)</div>", "\n");
+        text = text.replaceAll("(?i)</li>", "\n");
+        text = text.replaceAll("(?i)<h[1-6][^>]*>", "\n");
+        text = text.replaceAll("(?i)</h[1-6]>", "\n");
+        // 2. 列表项前加标记
+        text = text.replaceAll("(?i)<li[^>]*>", "\n• ");
+        // 3. 去除所有剩余 HTML 标签
+        text = text.replaceAll("<[^>]*>", "");
+        // 4. 解码常见 HTML 实体
+        text = text.replace("&amp;", "&");
+        text = text.replace("&lt;", "<");
+        text = text.replace("&gt;", ">");
+        text = text.replace("&quot;", "\"");
+        text = text.replace("&#39;", "'");
+        text = text.replace("&nbsp;", " ");
+        text = text.replace("&ensp;", " ");
+        text = text.replace("&emsp;", "  ");
+        // 5. 规范化空白
+        text = text.replace("\r\n", "\n").replace("\r", "\n");
+        // 压缩连续空行为最多两个换行
+        text = text.replaceAll("\n{3,}", "\n\n");
+        // 去除每行首尾空格
+        StringBuilder sb = new StringBuilder();
+        for (String line : text.split("\n")) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                if (sb.length() > 0) sb.append('\n');
+                sb.append(trimmed);
+            } else if (sb.length() > 0 && !sb.toString().endsWith("\n\n")) {
+                sb.append('\n');
+            }
+        }
+        return sb.toString().trim();
+    }
+
+    /**
+     * 从 JsonNode 数组提取字符串列表.
+     */
+    private static List<String> getStringList(JsonNode arrayNode) {
+        List<String> list = new ArrayList<>();
+        if (arrayNode.isArray()) {
+            for (JsonNode item : arrayNode) {
+                list.add(item.asText(""));
+            }
+        }
+        return list;
+    }
+
+    /**
+     * 从 JsonNode 数组提取 description 字段列表.
+     */
+    private static List<String> getDescriptions(JsonNode arrayNode) {
+        List<String> list = new ArrayList<>();
+        if (arrayNode.isArray()) {
+            for (JsonNode item : arrayNode) {
+                String desc = item.path("description").asText("");
+                if (!desc.isEmpty()) {
+                    list.add(desc);
+                }
+            }
+        }
+        return list;
     }
 
     /**
@@ -193,8 +270,6 @@ public class SteamTools {
             return "[ERROR] 查询最近游戏失败: " + e.getMessage();
         }
     }
-
-    // ==================== 辅助方法 ====================
 
     /**
      * 获取用户拥有的游戏列表及游玩时长.
@@ -473,7 +548,7 @@ public class SteamTools {
     /**
      * 查询游戏详情（商店信息）.
      */
-    @Tool(name = "steamGetGameDetails", description = "获取Steam商店中游戏的详细信息，包括价格、评价、发行日期、游戏简介等。")
+    @Tool(name = "steamGetGameDetails", description = "获取Steam商店中游戏的详细信息，包括价格、评价数量、发行日期、开发商、游戏简介、详细描述、关于游戏等。")
     public String getGameDetails(
             @Param(name = "appId", description = "游戏的Steam App ID") String appId,
             @Param(name = "language", description = "语言，默认schinese(简体中文)", required = false) String language
@@ -494,24 +569,42 @@ public class SteamTools {
             String name = data.path("name").asText("未知游戏");
             String type = data.path("type").asText("未知");
             String shortDesc = data.path("short_description").asText("");
+            String detailedDesc = data.path("detailed_description").asText("");
+            String aboutTheGame = data.path("about_the_game").asText("");
             String releaseDate = data.path("release_date").path("date").asText("未知");
             boolean isFree = data.path("is_free").asBoolean(false);
 
-            // 价格信息
+            // 价格信息（详细）
             JsonNode priceInfo = data.path("price_overview");
-            String price = "未知";
+            String priceStr;
             if (isFree) {
-                price = "免费游戏";
+                priceStr = "免费游戏";
             } else if (!priceInfo.isMissingNode()) {
-                price = priceInfo.path("final_formatted").asText("未知");
+                String currency = priceInfo.path("currency").asText("");
+                String initialPrice = priceInfo.path("initial_formatted").asText("");
+                String finalPrice = priceInfo.path("final_formatted").asText("未知");
+                int discountPercent = priceInfo.path("discount_percent").asInt(0);
+                if (discountPercent > 0) {
+                    priceStr = finalPrice + "（原价: " + initialPrice + ", 折扣: -" + discountPercent + "%）";
+                } else {
+                    priceStr = finalPrice;
+                }
+            } else {
+                priceStr = "暂无定价";
             }
 
-            // 评价信息
-            JsonNode reviews = data.path("reviews");
-            String reviewSummary = "";
+            // 评价数量
+            JsonNode recommendations = data.path("recommendations");
+            int reviewCount = recommendations.path("total").asInt(0);
+            String reviewStr = reviewCount > 0 ? String.format("%,d", reviewCount) + " 条用户评价" : "暂无评价";
+
             // Metacritic 分数
             JsonNode metacritic = data.path("metacritic");
             String metacriticScore = metacritic.isMissingNode() ? "无" : metacritic.path("score").asText("无");
+
+            // 开发商和发行商
+            List<String> developers = getStringList(data.path("developers"));
+            List<String> publishers = getStringList(data.path("publishers"));
 
             // 平台支持
             JsonNode platforms = data.path("platforms");
@@ -521,33 +614,65 @@ public class SteamTools {
             if (platforms.path("linux").asBoolean(false)) supportedPlatforms.add("Linux");
 
             // 类别和标签
-            JsonNode categories = data.path("categories");
-            JsonNode genres = data.path("genres");
-            List<String> genreList = new ArrayList<>();
-            if (genres.isArray()) {
-                for (JsonNode g : genres) {
-                    genreList.add(g.path("description").asText(""));
-                }
-            }
+            List<String> genreList = getDescriptions(data.path("genres"));
+            List<String> categoryList = getDescriptions(data.path("categories"));
 
+            // 构建输出
             List<String> results = new ArrayList<>();
             results.add("🎮 游戏详情 — " + name + "\n");
+
+            // 基本信息
+            results.add("━━━ 基本信息 ━━━");
             results.add("App ID: " + appId);
             results.add("类型: " + type);
             results.add("发行日期: " + releaseDate);
-            results.add("价格: " + price);
-            results.add("Metacritic 评分: " + metacriticScore);
-            results.add("支持平台: " + String.join(", ", supportedPlatforms));
+            if (!developers.isEmpty()) {
+                results.add("开发商: " + String.join(", ", developers));
+            }
+            if (!publishers.isEmpty()) {
+                results.add("发行商: " + String.join(", ", publishers));
+            }
 
+            // 价格与评价
+            results.add("\n━━━ 价格与评价 ━━━");
+            results.add("价格: " + priceStr);
+            results.add("用户评价: " + reviewStr);
+            results.add("Metacritic 评分: " + metacriticScore);
+
+            // 平台与类型
+            results.add("\n━━━ 平台与类型 ━━━");
+            results.add("支持平台: " + String.join(", ", supportedPlatforms));
             if (!genreList.isEmpty()) {
                 results.add("游戏类型: " + String.join(", ", genreList));
             }
+            if (!categoryList.isEmpty()) {
+                results.add("游戏分类: " + String.join(", ", categoryList));
+            }
 
+            // 简介
             if (!shortDesc.isEmpty()) {
-                // 清理 HTML 标签
-                shortDesc = shortDesc.replaceAll("<[^>]*>", "");
                 results.add("\n📝 游戏简介:");
-                results.add(shortDesc);
+                results.add(cleanHtml(shortDesc));
+            }
+
+            // 详细描述（限制长度避免过长）
+            if (!detailedDesc.isEmpty()) {
+                String cleaned = cleanHtml(detailedDesc);
+                if (cleaned.length() > 1500) {
+                    cleaned = cleaned.substring(0, 1500) + "...";
+                }
+                results.add("\n📖 详细描述:");
+                results.add(cleaned);
+            }
+
+            // 关于游戏
+            if (!aboutTheGame.isEmpty()) {
+                String cleaned = cleanHtml(aboutTheGame);
+                if (cleaned.length() > 1500) {
+                    cleaned = cleaned.substring(0, 1500) + "...";
+                }
+                results.add("\nℹ️ 关于游戏:");
+                results.add(cleaned);
             }
 
             return String.join("\n", results);
