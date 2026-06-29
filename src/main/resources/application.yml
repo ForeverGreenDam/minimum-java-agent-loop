@@ -16,6 +16,26 @@ memory:
     reserve-tokens: 8000
     # 保留最近 N 轮完整对话不被摘要压缩（至少为 1）
     keep-turns: 3
+  long:
+    # 是否启用长期记忆
+    enabled: true
+    # 存储目录
+    storage-dir: memory/long
+    # 最多保留多少条记忆（超出后淘汰低分条目）
+    max-entries: 500
+    # Embedding 语义向量配置（不启用时退化为纯 BM25 检索）
+    embedding:
+      enabled: false
+      base-url: https://api.openai.com/v1
+      api-key: ${embedding.api-key}
+      model: text-embedding-3-small
+    # 混合检索参数
+    retrieval:
+      bm25-weight: 0.3         # BM25 在混合评分中的权重 (0~1)
+      cliff-multiplier: 2.0    # 断崖检测乘数（越大越不容易截断）
+      prefetch-k: 50           # BM25 粗筛候选数
+      top-k: 5                 # 每轮检索注入的记忆数
+      auto-inject: true        # 是否自动将检索结果注入上下文
 
 # ==================== 日志级别 ====================
 logging:

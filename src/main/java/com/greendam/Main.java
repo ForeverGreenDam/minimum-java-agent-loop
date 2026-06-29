@@ -1,15 +1,12 @@
 package com.greendam;
 
 import com.greendam.config.ConfigLoader;
-import com.greendam.entity.Choice;
-import com.greendam.entity.Message;
-import com.greendam.entity.OpenAiRequest;
-import com.greendam.entity.OpenAiResponse;
-import com.greendam.memory.ConversationLogger;
-import com.greendam.memory.ShortMemory;
+import com.greendam.entity.*;
+import com.greendam.memory.*;
 import com.greendam.tools.ToolCallManager;
 import com.greendam.tools.ToolDefManager;
 import com.greendam.tools.tools.*;
+import com.greendam.util.EmbeddingClient;
 import com.greendam.util.OpenAiClient;
 
 import java.util.List;
@@ -39,8 +36,23 @@ public class Main {
             }
             runLoop(input);
         }
+        // 从本次对话中提取长期记忆
+        if (LongMemoryStore.isLoaded()) {
+            List<MemoryEntry> extracted = MemoryExtractor.extract(
+                    ShortMemory.getAll(), LongMemoryStore.getAll());
+            if (!extracted.isEmpty()) {
+                LongMemoryStore.addBatch(extracted);
+                System.out.println("🧠 长期记忆：本次提取 " + extracted.size() + " 条");
+                for (MemoryEntry e : extracted) {
+                    System.out.println("   [" + e.getCategory() + "/"
+                            + e.getImportance() + "] " + e.getContent());
+                }
+            }
+        }
         // 退出对话后保存对话记忆到 log 目录
         ConversationLogger.saveToFile(ShortMemory.getAll());
+        // 持久化长期记忆
+        LongMemoryStore.saveAll();
         // 清理 Playwright 浏览器资源
         WebTools.shutdownPlaywright();
     }
@@ -66,6 +78,7 @@ public class Main {
         ToolDefManager.register(new ShellTools());
         ToolDefManager.register(new TextTools());
         ToolDefManager.register(new WebTools());
+        ToolDefManager.register(new MemoryTools());
         System.out.println("已注册工具：");
         ToolDefManager.toolNames().forEach(name -> System.out.print(name + " "));
     }
@@ -73,6 +86,8 @@ public class Main {
     public static void runLoop(String input) {
         //首先将问题保存到短期记忆中
         ShortMemory.add(Message.builder().role("user").content(input).build());
+        //检索相关长期记忆，注入上下文
+        MemoryRetriever.retrieveAndInject(input);
         //进入循环
         while (true) {
             // 确保上下文窗口不超限
@@ -135,8 +150,44 @@ public class Main {
         ShortMemory.setMaxTokens(maxCtxTokens);
         ShortMemory.setReserveTokens(reserveTk);
         ShortMemory.setKeepTurns(keepTurns);
-        System.out.println("记忆系统：maxTokens=" + maxCtxTokens
+        System.out.println("短期记忆：maxTokens=" + maxCtxTokens
                 + " reserveTokens=" + reserveTk + " keepTurns=" + keepTurns);
+
+        // 长期记忆
+        boolean longMemEnabled = cfg.getBool("memory.long.enabled", true);
+        if (longMemEnabled) {
+            String longDir = cfg.getString("memory.long.storage-dir", "memory/long");
+            int longMax = cfg.getInt("memory.long.max-entries", 500);
+            LongMemoryStore.configure(longDir, longMax);
+
+            // Embedding 客户端
+            boolean embEnabled = cfg.getBool("memory.long.embedding.enabled", false);
+            if (embEnabled) {
+                String embUrl = cfg.getString("memory.long.embedding.base-url",
+                        "https://api.openai.com/v1");
+                String embKey = System.getenv().getOrDefault("EMBEDDING_API_KEY",
+                        cfg.getString("memory.long.embedding.api-key", ""));
+                String embModel = cfg.getString("memory.long.embedding.model",
+                        "text-embedding-3-small");
+                EmbeddingClient.configure(true, embUrl, embKey, embModel);
+            }
+
+            // 混合检索参数
+            double bm25W = cfg.getDouble("memory.long.retrieval.bm25-weight", 0.3);
+            double cliffM = cfg.getDouble("memory.long.retrieval.cliff-multiplier", 2.0);
+            int prefetchK = cfg.getInt("memory.long.retrieval.prefetch-k", 50);
+            HybridRetriever.configure(bm25W, cliffM, prefetchK);
+
+            // 检索注入参数
+            int retTopK = cfg.getInt("memory.long.retrieval.top-k", 5);
+            boolean autoInject = cfg.getBool("memory.long.retrieval.auto-inject", true);
+            MemoryRetriever.configure(retTopK, autoInject);
+
+            LongMemoryStore.loadAll();
+            System.out.println("长期记忆：dir=" + longDir + " maxEntries=" + longMax
+                    + " retrieval=BM25" + (EmbeddingClient.isEnabled() ? "+Embedding" : "")
+                    + " bm25Weight=" + bm25W);
+        }
     }
 
     /**
@@ -152,6 +203,13 @@ public class Main {
                         ## 核心能力
                         - 你可以调用工具完成文件读写、Shell 命令执行、网络请求、数学计算、文本处理等任务
                         - 你拥有短期记忆（当前会话上下文）和长期记忆（跨会话持久化），能记住对话中的重要信息
+                        - 你可以使用 remember 工具主动记住重要信息，使用 recall 工具搜索历史记忆，使用 forget 工具删除过时记忆
+                        
+                        ## 记忆管理最佳实践
+                        - 当用户明确说"记住xxx"、"别忘了xxx"时，立即调用 remember 工具
+                        - 当用户分享重要偏好、做关键决策、透露项目配置信息时，主动调用 remember
+                        - 执行重要操作前，如果觉得可能遗漏了之前的约定，先调用 recall 确认
+                        - 当用户说"忘掉xxx"、"不用记xxx了"时，调用 forget 工具
                         
                         ## 行为准则
                         - 优先使用工具完成任务，而非凭空猜测
@@ -159,6 +217,7 @@ public class Main {
                         - 当上下文不足或信息不确定时，主动询问而非假设
                         - 涉及文件操作、Shell 命令等可能有副作用的操作时，先说明意图再执行
                         - 当涉及到时间敏感型问题时，优先调用getCurrentTime获取当前时间
+                        - 如果你第一次调用webToText工具，网站没有返回想要的数据，那么有可能是这是个动态网页，需要你再调用webToTextBrowser获取动态网页内容
                         """)
                 .build();
         ShortMemory.add(systemMsg);

@@ -21,7 +21,6 @@ import java.util.List;
 public final class ConversationLogger {
 
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final DateTimeFormatter FILE_DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
     private static final DateTimeFormatter DISPLAY_DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private ConversationLogger() {
@@ -39,7 +38,7 @@ public final class ConversationLogger {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        String fileName = "conversation_" + now.format(FILE_DATE_FMT) + ".md";
+        String fileName = "conversation_" + SessionContext.getId() + ".md";
 
         // 确保 log 目录存在
         File logDir = new File("log");

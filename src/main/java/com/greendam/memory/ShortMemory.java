@@ -6,6 +6,7 @@ import com.greendam.util.TokenCounter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * 短期记忆（工作记忆） — 当前会话的完整对话历史.
@@ -75,6 +76,16 @@ public final class ShortMemory {
     }
 
     /**
+     * 在指定位置插入一条消息.
+     *
+     * @param index   插入位置
+     * @param message 消息对象
+     */
+    public static void add(int index, Message message) {
+        SHORT_MEMORY.add(index, message);
+    }
+
+    /**
      * 批量追加消息（用于追加工具调用结果等）.
      *
      * @param messages 消息列表，为 null 或空列表时无操作
@@ -99,6 +110,18 @@ public final class ShortMemory {
      */
     public static Message remove(int index) {
         return SHORT_MEMORY.remove(index);
+    }
+
+    /**
+     * 按条件移除消息.
+     *
+     * @param predicate 匹配条件，返回 true 的消息将被移除
+     * @return 被移除的消息数量
+     */
+    public static int removeIf(Predicate<Message> predicate) {
+        int before = SHORT_MEMORY.size();
+        SHORT_MEMORY.removeIf(predicate);
+        return before - SHORT_MEMORY.size();
     }
 
     /**
