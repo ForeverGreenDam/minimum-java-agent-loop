@@ -56,6 +56,12 @@ public final class LongMemoryStore {
     private static int maxEntries = 500;
 
     /**
+     * 最低重要度阈值 — 低于此值的记忆不写入长期存储
+     */
+    @Getter
+    private static int minImportance = 5;
+
+    /**
      * 索引文件路径
      */
     private static Path indexPath;
@@ -71,9 +77,10 @@ public final class LongMemoryStore {
 
     // ==================== 配置 ====================
 
-    public static void configure(String dir, int max) {
+    public static void configure(String dir, int max, int minImp) {
         storageDir = dir;
         maxEntries = Math.max(10, max);
+        minImportance = Math.max(1, Math.min(10, minImp));
         indexPath = Paths.get(storageDir, "index.json");
     }
 
@@ -149,9 +156,11 @@ public final class LongMemoryStore {
 
     /**
      * 新增一条记忆，同时生成 embedding 并增量更新索引.
+     * <p>重要度低于 {@code MIN_IMPORTANCE} 的条目会被静默丢弃.
      */
     public static void add(MemoryEntry entry) {
         if (entry == null) return;
+        if (entry.getImportance() < minImportance) return;
         synchronized (ENTRIES) {
             generateEmbedding(entry);
             ENTRIES.add(entry);
@@ -163,11 +172,13 @@ public final class LongMemoryStore {
     /**
      * 批量新增记忆，仅最后重建一次 IDF.
      * <p>适合会话结束时一次性提取多条记忆的场景，比逐条 add 高效.
+     * <p>重要度低于 {@code MIN_IMPORTANCE} 的条目会被静默过滤.
      */
     public static void addBatch(List<MemoryEntry> entries) {
         if (entries == null || entries.isEmpty()) return;
         synchronized (ENTRIES) {
             for (MemoryEntry entry : entries) {
+                if (entry.getImportance() < minImportance) continue;
                 generateEmbedding(entry);
                 ENTRIES.add(entry);
             }

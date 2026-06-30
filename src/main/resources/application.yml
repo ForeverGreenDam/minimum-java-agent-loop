@@ -23,6 +23,8 @@ memory:
     storage-dir: memory/long
     # 最多保留多少条记忆（超出后淘汰低分条目）
     max-entries: 500
+    # 最低重要度阈值（1-10），低于此值的记忆不写入长期存储
+    min-importance: 5
     # Embedding 语义向量配置（不启用时退化为纯 BM25 检索）
     embedding:
       enabled: false

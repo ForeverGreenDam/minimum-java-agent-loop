@@ -52,6 +52,13 @@ public final class MemoryExtractor {
      */
     private static final int MAX_EXISTING_IN_PROMPT = 30;
 
+    /**
+     * 最低重要度阈值 — 低于此值的记忆不写入长期存储（从 LongMemoryStore 读取）
+     */
+    private static int getMinImportance() {
+        return LongMemoryStore.getMinImportance();
+    }
+
     private MemoryExtractor() {
     }
 
@@ -228,10 +235,11 @@ public final class MemoryExtractor {
                     new TypeReference<List<MemoryEntry>>() {
                     });
 
-            // 过滤掉明显无效的条目
+            // 过滤掉明显无效的条目和低重要度条目
             return entries.stream()
                     .filter(e -> e.getContent() != null && !e.getContent().isBlank())
                     .filter(e -> e.getContent().length() >= 5) // 太短的不是有效记忆
+                    .filter(e -> e.getImportance() >= getMinImportance()) // 低于阈值的不值得长期保留
                     .collect(Collectors.toList());
         } catch (Exception e) {
             System.err.println("⚠️ 记忆提取 JSON 解析失败: " + e.getMessage());

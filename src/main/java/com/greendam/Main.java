@@ -159,7 +159,8 @@ public class Main {
         if (longMemEnabled) {
             String longDir = cfg.getString("memory.long.storage-dir", "memory/long");
             int longMax = cfg.getInt("memory.long.max-entries", 500);
-            LongMemoryStore.configure(longDir, longMax);
+            int minImp = cfg.getInt("memory.long.min-importance", 5);
+            LongMemoryStore.configure(longDir, longMax, minImp);
 
             // Embedding 客户端
             boolean embEnabled = cfg.getBool("memory.long.embedding.enabled", false);
@@ -186,6 +187,7 @@ public class Main {
 
             LongMemoryStore.loadAll();
             System.out.println("长期记忆：dir=" + longDir + " maxEntries=" + longMax
+                    + " minImportance=" + minImp
                     + " retrieval=BM25" + (EmbeddingClient.isEnabled() ? "+Embedding" : "")
                     + " bm25Weight=" + bm25W);
         }
