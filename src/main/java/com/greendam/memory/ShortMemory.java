@@ -97,6 +97,15 @@ public final class ShortMemory {
     }
 
     /**
+     * 修改系统提示（仅修改第一个）.注入skill使用
+     *
+     * @param message
+     */
+    public static void setSystemMsg(Message message) {
+        SHORT_MEMORY.addFirst(message);
+    }
+
+    /**
      * 移除指定消息（按 equals 匹配）.
      */
     public static void remove(Message message) {
@@ -189,24 +198,12 @@ public final class ShortMemory {
 
     // ==================== 配置 ====================
 
-    public static int getMaxTokens() {
-        return maxTokens;
-    }
-
     public static void setMaxTokens(int maxTokens) {
         ShortMemory.maxTokens = maxTokens;
     }
 
-    public static int getReserveTokens() {
-        return reserveTokens;
-    }
-
     public static void setReserveTokens(int reserveTokens) {
         ShortMemory.reserveTokens = reserveTokens;
-    }
-
-    public static int getKeepTurns() {
-        return keepTurns;
     }
 
     /**

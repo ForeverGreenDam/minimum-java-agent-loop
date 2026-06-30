@@ -49,3 +49,6 @@ logging:
   level:
     root: INFO
     com.greendam: DEBUG
+skill:
+  # 技能目录，此处为相对路径
+  dir: skills

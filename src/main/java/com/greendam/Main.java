@@ -3,6 +3,7 @@ package com.greendam;
 import com.greendam.config.ConfigLoader;
 import com.greendam.entity.*;
 import com.greendam.memory.*;
+import com.greendam.skills.SkillsManager;
 import com.greendam.tools.ToolCallManager;
 import com.greendam.tools.ToolDefManager;
 import com.greendam.tools.tools.*;
@@ -10,6 +11,7 @@ import com.greendam.util.EmbeddingClient;
 import com.greendam.util.OpenAiClient;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 
 public class Main {
@@ -67,6 +69,7 @@ public class Main {
         System.out.println("当前温度：" + ConfigLoader.get().getDouble("openai.temperature", 0.7));
         registerTools();
         initMemory();
+        initSkills();
         injectSystemPrompt();
         System.out.println("=================================");
     }
@@ -80,8 +83,10 @@ public class Main {
         ToolDefManager.register(new WebTools());
         ToolDefManager.register(new MemoryTools());
         ToolDefManager.register(new SteamTools());
+        ToolDefManager.register(new SkillEnable());
         System.out.println("已注册工具：");
         ToolDefManager.toolNames().forEach(name -> System.out.print(name + " "));
+        System.out.println();
     }
 
     public static void runLoop(String input) {
@@ -208,6 +213,11 @@ public class Main {
                         - 你拥有短期记忆（当前会话上下文）和长期记忆（跨会话持久化），能记住对话中的重要信息
                         - 你可以使用 remember 工具主动记住重要信息，使用 recall 工具搜索历史记忆，使用 forget 工具删除过时记忆
                         
+                        ## Skill功能
+                        - 当前你具有skill功能，具体的skill元数据如下
+                        """
+                        + SkillsManager.injectSkillMetadata() +
+                        """
                         ## 记忆管理最佳实践
                         - 当用户明确说"记住xxx"、"别忘了xxx"时，立即调用 remember 工具
                         - 当用户分享重要偏好、做关键决策、透露项目配置信息时，主动调用 remember
@@ -224,7 +234,19 @@ public class Main {
                         - 使用steam工具时，如果涉及到用户ID，你应当主动询问用户的steamID
                         """)
                 .build();
+        System.out.println("系统提示词：" + systemMsg.getContent());
         ShortMemory.add(systemMsg);
+    }
+
+    /**
+     * 加载skill系统
+     */
+    private static void initSkills() {
+        SkillsManager.skillLoader();
+        Map<String, Map.Entry<SkillMetadata, String>> skills = SkillsManager.getSkills();
+        System.out.println("已加载技能系统，当前技能列表：");
+        skills.keySet().forEach(name -> System.out.print(name + " "));
+        System.out.println();
     }
 
     public static void simpleChat() {
